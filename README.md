@@ -26,18 +26,20 @@ A local AI scheduling assistant that reads your Google Calendar and books work s
 
 ---
 
-## Google Calendar Setup (one-time)
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project (or use existing)
-3. Enable **Google Calendar API**
-4. Go to **APIs & Services → Credentials**
-5. Create **OAuth 2.0 Client ID** → Application type: **Desktop app**
-6. Download the JSON file and rename it to `credentials.json`
 7. Place `credentials.json` in the **project root** (same folder as `run.sh`)
-8. On first run, a browser window will open to authorize — click Allow
 
-> Your `token.json` is auto-generated after first auth and reused on subsequent runs.
+## First Run & Authentication
+
+On the first run (or if your token expires):
+
+1. Start the app (via `run.sh` or Docker).
+2. Open `http://localhost:3000`.
+3. Click the **LOGIN** button in the top right.
+4. Follow the link to sign in with Google.
+5. Google will provide an **Authorization Code** — copy it.
+6. Paste the code into the app's modal and click **SUBMIT**.
+
+> Your `token.json` is auto-generated after auth and reused on subsequent runs.
 
 ---
 
@@ -61,10 +63,10 @@ ANTHROPIC_API_KEY=
 ```
 
 **Model name examples by provider:**
-| Provider  | Example models                          |
+| Provider | Example models |
 |-----------|-----------------------------------------|
-| gemini    | `gemini-2.5-flash`, `gemini-1.5-pro`   |
-| openai    | `gpt-4o`, `gpt-4o-mini`                |
+| gemini | `gemini-2.5-flash`, `gemini-1.5-pro` |
+| openai | `gpt-4o`, `gpt-4o-mini` |
 | anthropic | `claude-opus-4-5`, `claude-sonnet-4-5` |
 
 ---
@@ -77,6 +79,7 @@ chmod +x run.sh
 ```
 
 The script will:
+
 1. Create a Python virtual environment (first run only)
 2. Install all backend dependencies
 3. Run `npm install` for the frontend (first run only)
@@ -94,7 +97,7 @@ docker compose up --build
 Then open `http://localhost:3000`.
 
 > Make sure `credentials.json` is in the project root before starting Docker.  
-> The `token.json` will be created and persisted via volume mount on first auth.
+> The `token.json` will be created inside the `backend/` directory and persisted via the backend volume mount.
 
 ---
 
