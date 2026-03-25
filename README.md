@@ -26,6 +26,14 @@ A local AI scheduling assistant that reads your Google Calendar and books work s
 
 ---
 
+## Google Calendar Setup (one-time)
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project (or use existing)
+3. Enable **Google Calendar API**
+4. Go to **APIs & Services → Credentials**
+5. Create **OAuth 2.0 Client ID** → Application type: **Desktop app**
+6. Download the JSON file and rename it to `credentials.json`
 7. Place `credentials.json` in the **project root** (same folder as `run.sh`)
 
 ## First Run & Authentication
