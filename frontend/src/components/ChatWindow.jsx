@@ -112,8 +112,60 @@ export default function ChatWindow() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [sessionId] = useState(() => uuidv4());
+  const [authenticated, setAuthenticated] = useState(true);
+  const [authNeeded, setAuthNeeded] = useState(false);
+  const [authUrl, setAuthUrl] = useState('');
+  const [authCodeInput, setAuthCodeInput] = useState('');
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+  
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
+
+  useEffect(() => {
+    // Check initial auth status
+    fetch(`${API_BASE}/auth/status`)
+      .then(res => res.json())
+      .then(data => {
+        setAuthenticated(data.authenticated);
+      })
+      .catch(console.error);
+  }, []);
+
+  const startAuthFlow = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/url`);
+      const data = await res.json();
+      setAuthUrl(data.url);
+      setAuthNeeded(true);
+      window.open(data.url, '_blank');
+    } catch (err) {
+      alert(`Error starting auth: ${err.message}`);
+    }
+  };
+
+  const submitAuthCode = async () => {
+    if (!authCodeInput.trim()) return;
+    setAuthSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: authCodeInput.trim() }),
+      });
+      if (res.ok) {
+        setAuthenticated(true);
+        setAuthNeeded(false);
+        setAuthCodeInput('');
+      } else {
+        const err = await res.json();
+        alert(`Auth failed: ${err.detail}`);
+      }
+    } catch (err) {
+      alert(`Auth failed: ${err.message}`);
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -131,7 +183,12 @@ export default function ChatWindow() {
       const data = await sendMessage(sessionId, trimmed);
       setMessages(prev => [...prev, { role: 'agent', content: data.reply }]);
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'error', content: err.message }]);
+      if (err.message.includes('401')) {
+        setAuthenticated(false);
+        setMessages(prev => [...prev, { role: 'error', content: 'Not authenticated with Google Calendar.' }]);
+      } else {
+        setMessages(prev => [...prev, { role: 'error', content: err.message }]);
+      }
     } finally {
       setLoading(false);
       setTimeout(() => textareaRef.current?.focus(), 50);
@@ -195,25 +252,47 @@ export default function ChatWindow() {
             </div>
           </div>
         </div>
-        <button
-          onClick={clearChat}
-          style={{
-            background: 'transparent',
-            border: '1px solid var(--border)',
-            borderRadius: 8,
-            color: 'var(--text-muted)',
-            padding: '6px 12px',
-            fontSize: 12,
-            cursor: 'pointer',
-            fontFamily: 'var(--font-mono)',
-            letterSpacing: '0.06em',
-            transition: 'all 0.15s',
-          }}
-          onMouseEnter={e => { e.target.style.borderColor = 'var(--accent)'; e.target.style.color = 'var(--accent)'; }}
-          onMouseLeave={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.color = 'var(--text-muted)'; }}
-        >
-          CLEAR
-        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          {!authenticated && (
+            <button
+              onClick={startAuthFlow}
+              style={{
+                background: 'var(--accent)',
+                border: 'none',
+                borderRadius: 8,
+                color: '#0e0e10',
+                padding: '6px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                fontFamily: 'var(--font-mono)',
+                letterSpacing: '0.06em',
+                boxShadow: '0 0 10px rgba(200, 240, 74, 0.2)',
+              }}
+            >
+              LOGIN
+            </button>
+          )}
+          <button
+            onClick={clearChat}
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              borderRadius: 8,
+              color: 'var(--text-muted)',
+              padding: '6px 12px',
+              fontSize: 12,
+              cursor: 'pointer',
+              fontFamily: 'var(--font-mono)',
+              letterSpacing: '0.06em',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { e.target.style.borderColor = 'var(--accent)'; e.target.style.color = 'var(--accent)'; }}
+            onMouseLeave={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.color = 'var(--text-muted)'; }}
+          >
+            CLEAR
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
@@ -338,6 +417,94 @@ export default function ChatWindow() {
           ENTER TO SEND · SHIFT+ENTER FOR NEW LINE
         </div>
       </div>
+
+      {authNeeded && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.85)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 24, zIndex: 1000,
+        }}>
+          <div style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 16,
+            padding: 32,
+            maxWidth: 450,
+            width: '100%',
+            textAlign: 'center',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+          }}>
+            <h2 style={{ fontFamily: 'var(--font-display)', marginBottom: 12 }}>Authentication Required</h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 24 }}>
+              Click the button below to sign in with Google. You will receive a code to paste back here.
+            </p>
+            <a href={authUrl} target="_blank" rel="noreferrer" style={{
+              display: 'inline-block',
+              padding: '12px 24px',
+              background: 'var(--accent)',
+              color: '#0e0e10',
+              textDecoration: 'none',
+              borderRadius: 8,
+              fontWeight: 600,
+              marginBottom: 24,
+              fontSize: 14,
+            }}>Sign in with Google</a>
+            
+            <div style={{ marginTop: 8, textAlign: 'left' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, letterSpacing: '0.08em' }}>PASTE AUTH CODE HERE</div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <input
+                  type="text"
+                  value={authCodeInput}
+                  onChange={e => setAuthCodeInput(e.target.value)}
+                  placeholder="Paste Code..."
+                  style={{
+                    flex: 1,
+                    background: 'var(--bg)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    padding: '8px 12px',
+                    color: 'var(--text)',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 13,
+                    outline: 'none',
+                  }}
+                />
+                <button
+                  onClick={submitAuthCode}
+                  disabled={authSubmitting || !authCodeInput.trim()}
+                  style={{
+                    padding: '8px 16px',
+                    background: authCodeInput.trim() ? 'var(--accent)' : 'var(--border)',
+                    color: '#0e0e10',
+                    border: 'none',
+                    borderRadius: 8,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {authSubmitting ? '...' : 'SUBMIT'}
+                </button>
+              </div>
+            </div>
+            <button
+              onClick={() => setAuthNeeded(false)}
+              style={{
+                marginTop: 24,
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-muted)',
+                fontSize: 12,
+                cursor: 'pointer',
+                textDecoration: 'underline',
+              }}
+            >Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

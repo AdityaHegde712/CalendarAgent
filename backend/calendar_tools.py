@@ -6,34 +6,90 @@ from zoneinfo import ZoneInfo
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google_auth_oauthlib.flow import InstalledAppFlow, Flow
 from googleapiclient.discovery import build
 from langchain_core.tools import tool
 
 from config import SCOPES, GOOGLE_CREDENTIALS_FILE, GOOGLE_TOKEN_FILE
 
+# Holds a pending OAuth flow waiting for the user to paste a code
+_pending_flow: Flow | None = None
+
+
+def _token_file_is_valid() -> bool:
+    """Return True only if token path exists AND is a file (not a dir)."""
+    return os.path.isfile(GOOGLE_TOKEN_FILE)
+
+
+def _save_token(creds: Credentials) -> None:
+    """Write credentials to token file, removing any stale directory first."""
+    if os.path.isdir(GOOGLE_TOKEN_FILE):
+        import shutil
+        shutil.rmtree(GOOGLE_TOKEN_FILE)
+    with open(GOOGLE_TOKEN_FILE, "w") as f:
+        f.write(creds.to_json())
+
+
+def get_auth_url() -> str | None:
+    """
+    If not yet authenticated, start an OAuth flow and return the URL the user
+    must visit. Returns None if already authenticated.
+    """
+    global _pending_flow
+
+    if _token_file_is_valid():
+        creds = Credentials.from_authorized_user_file(GOOGLE_TOKEN_FILE, SCOPES)
+        if creds and creds.valid:
+            return None
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+            _save_token(creds)
+            return None
+
+    if not os.path.exists(GOOGLE_CREDENTIALS_FILE):
+        raise FileNotFoundError(
+            f"Google credentials file not found at '{GOOGLE_CREDENTIALS_FILE}'. "
+            "Please follow the README to set up Google Calendar API."
+        )
+
+    _pending_flow = InstalledAppFlow.from_client_secrets_file(
+        GOOGLE_CREDENTIALS_FILE,
+        SCOPES,
+        redirect_uri="urn:ietf:wg:oauth:2.0:oob",  # console / copy-paste flow
+    )
+    auth_url, _ = _pending_flow.authorization_url(prompt="consent")
+    return auth_url
+
+
+def complete_auth(code: str) -> None:
+    """Exchange the auth code the user pasted for a token and save it."""
+    global _pending_flow
+    if _pending_flow is None:
+        raise RuntimeError("No pending OAuth flow. Call get_auth_url() first.")
+    _pending_flow.fetch_token(code=code.strip())
+    _save_token(_pending_flow.credentials)
+    _pending_flow = None
+
 
 def get_calendar_service():
-    """Authenticate and return Google Calendar service."""
-    creds = None
+    """Return an authenticated Google Calendar service, or raise if not authed."""
+    if not _token_file_is_valid():
+        raise PermissionError(
+            "Not authenticated with Google Calendar. "
+            "Please complete the OAuth flow via the /auth endpoints."
+        )
 
-    if os.path.exists(GOOGLE_TOKEN_FILE):
-        creds = Credentials.from_authorized_user_file(GOOGLE_TOKEN_FILE, SCOPES)
+    creds = Credentials.from_authorized_user_file(GOOGLE_TOKEN_FILE, SCOPES)
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
+            _save_token(creds)
         else:
-            if not os.path.exists(GOOGLE_CREDENTIALS_FILE):
-                raise FileNotFoundError(
-                    f"Google credentials file not found at '{GOOGLE_CREDENTIALS_FILE}'. "
-                    "Please follow README instructions to set up Google Calendar API."
-                )
-            flow = InstalledAppFlow.from_client_secrets_file(GOOGLE_CREDENTIALS_FILE, SCOPES)
-            creds = flow.run_local_server(port=0)
-
-        with open(GOOGLE_TOKEN_FILE, "w") as token:
-            token.write(creds.to_json())
+            raise PermissionError(
+                "Google Calendar token is invalid or expired. "
+                "Please re-authenticate via the /auth endpoints."
+            )
 
     return build("calendar", "v3", credentials=creds)
 

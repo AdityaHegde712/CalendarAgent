@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import uuid
+from calendar_tools import get_auth_url, complete_auth, _token_file_is_valid
 
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, BaseMessage
 
@@ -31,6 +32,18 @@ class MessageResponse(BaseModel):
     session_id: str
     reply: str
     done: bool = True
+
+
+class AuthStatus(BaseModel):
+    authenticated: bool
+
+
+class AuthUrl(BaseModel):
+    url: str
+
+
+class AuthComplete(BaseModel):
+    code: str
 
 
 def serialize_message(msg: BaseMessage) -> dict:
@@ -74,12 +87,36 @@ async def chat(req: MessageRequest):
 
         return MessageResponse(session_id=session_id, reply=reply)
 
+    except PermissionError as e:
+        raise HTTPException(status_code=401, detail=str(e))
     except FileNotFoundError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+
+
+@app.get("/auth/status", response_model=AuthStatus)
+async def auth_status():
+    return AuthStatus(authenticated=_token_file_is_valid())
+
+
+@app.get("/auth/url", response_model=AuthUrl)
+async def auth_url():
+    url = get_auth_url()
+    if url is None:
+        raise HTTPException(status_code=400, detail="Already authenticated")
+    return AuthUrl(url=url)
+
+
+@app.post("/auth/complete")
+async def auth_complete(auth: AuthComplete):
+    try:
+        complete_auth(auth.code)
+        return {"status": "authenticated"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.delete("/chat/{session_id}")

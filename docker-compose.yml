@@ -11,7 +11,7 @@ services:
       - ./backend:/app
       # Mount credentials and token from project root into container
       - ./credentials.json:/app/credentials.json:ro
-      - ./token.json:/app/token.json
+      # Let the backend manage token.json within its own volume
     env_file:
       - .env
     restart: unless-stopped
