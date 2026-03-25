@@ -1,161 +1,134 @@
 # 📅 Calendar Agent
 
-A local AI scheduling assistant that reads your Google Calendar and books work sessions from natural language requests.
+A smart local AI scheduling assistant that reads your Google Calendar and books work sessions from natural language requests.
 
 > "Schedule 3 hours of work on Essay Draft before Friday"  
 > → Agent checks free slots → proposes a plan → you confirm → events created ✓
 
 ---
 
-## Features
+## ✨ Features
 
-- **Natural language scheduling** — describe your task, duration, and deadline
-- **Clarifying questions** — the agent asks before acting, never guesses
-- **Respects existing events** — only schedules in truly free time
-- **Split sessions** — can break a 3-hour block into multiple smaller sessions
-- **Configurable LLM** — defaults to Gemini 2.5 Flash; swap to OpenAI or Anthropic via `.env`
-
----
-
-## Prerequisites
-
-- Python 3.11+
-- Node.js 18+
-- A Google Cloud project with Calendar API enabled
-- An LLM API key (Gemini / OpenAI / Anthropic)
+- **Natural Language Scheduling** — Just describe your task, duration, and deadline.
+- **Clarifying Questions** — The agent asks before acting; it never guesses your intent.
+- **Respects Existing Events** — Perfectly avoids conflicts with your current schedule.
+- **Split Sessions** — Intelligently breaks long tasks into multiple smaller blocks.
+- **Privacy First** — Your calendar data stays on your machine during the agent's logic.
+- **Multi-LLM Support** — Use Gemini (default), GPT-4, or Claude.
 
 ---
 
-## Google Calendar Setup (one-time)
+## 🚀 Getting Started
 
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project (or use existing)
-3. Enable **Google Calendar API**
-4. Go to **APIs & Services → Credentials**
-5. Create **OAuth 2.0 Client ID** → Application type: **Desktop app**
-6. Download the JSON file and rename it to `credentials.json`
-7. Place `credentials.json` in the **project root** (same folder as `run.sh`)
+### 1. Prerequisites
 
-## First Run & Authentication
+- **Python 3.11+** & **Node.js 18+**
+- **LLM API Key**: Gemini (default), OpenAI, or Anthropic.
+- **Google Cloud Project** with Calendar API enabled (see below).
 
-On the first run (or if your token expires):
+### 2. Google Cloud Setup (One-Time Setup)
 
-1. Start the app (via `run.sh` or Docker).
-2. Open `http://localhost:3000`.
+Because this agent interacts with your personal calendar, you need to set up a private "App" in the Google Cloud Console. Follow these steps carefully:
+
+#### A. Create the Project
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
+2. Create a new project (e.g., "My Calendar Agent").
+3. Search for **"Google Calendar API"** and click **Enable**.
+
+#### B. Configure OAuth Consent Screen
+
+1. Go to **APIs & Services → OAuth consent screen**.
+2. **User Type**: Select **External** and click **Create**.
+3. **App Information**: Fill in the required fields (App name, support email, developer email).
+4. **Permissions (Audience Control)**:
+   - Ensure the **Publishing Status** stays at **Testing**. This is the safest way to use it privately.
+5. **Test Users (Crucial)**:
+   - Under the **Test users** section, click **ADD USERS**.
+   - Add your own Google email address (the one with the calendar you want to use).
+   - **Note**: Google will block any account that isn't on this list while the app is in Testing mode.
+
+#### C. Create Credentials
+
+1. Go to **APIs & Services → Credentials**.
+2. Click **Create Credentials → OAuth 2.0 Client ID**.
+3. **Application type**: Select **Desktop app**.
+4. Download the JSON file, rename it to `credentials.json`, and place it in the **project root** folder.
+
+### 3. First-Run Authentication
+
+1. Launch the app (see the "Running" section below).
+2. Open `http://localhost:3000` in your browser.
 3. Click the **LOGIN** button in the top right.
-4. Follow the link to sign in with Google.
-5. Google will provide an **Authorization Code** — copy it.
-6. Paste the code into the app's modal and click **SUBMIT**.
+4. Follow the Google link to authorize. You will be given an **Authorization Code**.
+5. Copy the code, paste it into the app's modal and hit **SUBMIT**.
 
-> Your `token.json` is auto-generated after auth and reused on subsequent runs.
+> Your `token.json` is now generated! It is stored locally and will be reused for future sessions.
 
 ---
 
-## Configuration
+## 🛠️ Configuration
+
+1. Copy the example environment file:
+   ```bash
+   cp .env.example .env
+   ```
+2. Edit `.env` to select your provider and add your API key:
+   ```env
+   LLM_PROVIDER=gemini          # gemini | openai | anthropic
+   MODEL_NAME=gemini-2.5-flash
+   GEMINI_API_KEY=your_key_here
+   ```
+
+---
+
+## 🏃 Running the App
+
+### Option A: Docker (Recommended)
+
+Fast and isolated setup:
 
 ```bash
-cp .env.example .env
+docker compose up --build
 ```
 
-Edit `.env`:
+### Option B: Local Setup
 
-```env
-# Choose your LLM provider
-LLM_PROVIDER=gemini          # gemini | openai | anthropic
-MODEL_NAME=gemini-2.5-flash  # Model name for the chosen provider
-
-# Set the key for your chosen provider:
-GEMINI_API_KEY=your_key_here
-OPENAI_API_KEY=
-ANTHROPIC_API_KEY=
-```
-
-**Model name examples by provider:**
-| Provider | Example models |
-|-----------|-----------------------------------------|
-| gemini | `gemini-2.5-flash`, `gemini-1.5-pro` |
-| openai | `gpt-4o`, `gpt-4o-mini` |
-| anthropic | `claude-opus-4-5`, `claude-sonnet-4-5` |
-
----
-
-## Running (without Docker)
+Great for development or low-resource machines:
 
 ```bash
 chmod +x run.sh
 ./run.sh
 ```
 
-The script will:
-
-1. Create a Python virtual environment (first run only)
-2. Install all backend dependencies
-3. Run `npm install` for the frontend (first run only)
-4. Launch both servers
-5. Open `http://localhost:3000` in your browser
+This script handles virtual environments, dependency installation, and server launches automatically.
 
 ---
 
-## Running with Docker
+## ⚙️ How the Agent Works
 
-```bash
-docker compose up --build
-```
-
-Then open `http://localhost:3000`.
-
-> Make sure `credentials.json` is in the project root before starting Docker.  
-> The `token.json` will be created inside the `backend/` directory and persisted via the backend volume mount.
+1. **Context Building**: The agent calls `get_current_datetime` to understand "today".
+2. **Availability Check**: It uses `get_free_slots` to find open windows within your "work hours" before your deadline.
+3. **Proposal**: It presents a clear plan (e.g., "I'd like to book Tuesday 10–11:30 AM and Wednesday 2–3:30 PM").
+4. **User Confirmation**: It waits for you to say "yes" or "looks good" before touching your calendar.
+5. **Execution**: Once confirmed, it uses `create_calendar_events` to book the slots.
 
 ---
 
-## Project Structure
+## 💡 Pro-Tips
 
-```
-calendar-agent/
-├── backend/
-│   ├── main.py            # FastAPI app + session management
-│   ├── agent.py           # LangGraph ReAct agent
-│   ├── calendar_tools.py  # Google Calendar API tools
-│   ├── config.py          # LLM provider config
-│   └── requirements.txt
-├── frontend/
-│   └── src/
-│       ├── App.jsx
-│       └── components/ChatWindow.jsx
-├── docker-compose.yml
-├── Dockerfile.backend
-├── Dockerfile.frontend
-├── run.sh                 # Non-Docker launcher
-├── .env.example
-└── README.md
-```
+- **Be Specific**: Try "Schedule 4 hours for project X before EOD Thursday, morning preferred."
+- **Preferences**: You can tell the agent "one long block if possible" or "don't schedule on Mondays."
+- **Control**: Use the **CLEAR** button to reset the session if you want to start a fresh scheduling request.
 
 ---
 
-## How the Agent Works
+## 🛡️ Security & Privacy
 
-1. You type a scheduling request
-2. Agent calls `get_current_datetime` to know today's date
-3. Agent calls `get_free_slots` to find available windows before your deadline
-4. Agent **proposes** a schedule (e.g., "I'd like to book Tuesday 10–11:30 AM and Wednesday 2–3:30 PM")
-5. You confirm → agent calls `create_calendar_events`
-6. Agent reports back with confirmation and calendar links
+- **Local Storage**: `credentials.json` and `token.json` are stored ONLY on your machine and are git-ignored.
+- **Scoped Access**: The agent only has access to your Google Calendar; no other Google data is retrieved.
+- **Direct Connection**: All communication goes directly between your machine and Google/LLM APIs.
 
 ---
 
-## Tips
-
-- Be specific about deadlines: "before Friday", "by end of day Thursday", "this week"
-- You can specify preferences: "mornings only", "not Wednesday", "one long block if possible"
-- The agent will ask if anything is unclear before booking
-- Say "yes", "go ahead", "looks good" to confirm a proposed schedule
-- Say "clear" or use the CLEAR button to start a fresh conversation
-
----
-
-## Security Notes
-
-- `credentials.json` and `token.json` are **never** committed to version control (see `.gitignore`)
-- All data stays local — no external servers beyond Google Calendar API and your LLM provider
-- The token grants Calendar access only to the authorized account
+Made for those who want to reclaim their time. ⏱️
